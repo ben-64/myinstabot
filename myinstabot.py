@@ -46,7 +46,7 @@ def main():
     instagram.login()
 
     try:
-        for folder in os.listdir(args.folder):
+        for folder in sorted(os.listdir(args.folder)):
             path = os.path.join(args.folder,folder)
             if not os.path.isdir(path) or folder.startswith(IGNORE_PREFIX):
                 continue

@@ -16,16 +16,17 @@ def parse_args():
     parser.add_argument("--user","-u",metavar="USER",help="Instgram user")
     parser.add_argument("--password","-p",metavar="PASSWORD",help="Instgram password")
     parser.add_argument("--folder","-f",metavar="PHOTO_FOLDER",required=True,help="Folder where photos will be retrieved")
+    parser.add_argument("--base-path","-P",metavar="CONFIG_FOLDER",help="Temp folder for instabot")
     return parser.parse_args()
 
 
 class Instagram(object):
     """ Wrapper API for Instagram """
-    def __init__(self,user,password):
+    def __init__(self,user,password,base_path=None):
         from instabot import Bot
         self.user = user
         self.password = password
-        self.bot = Bot()
+        self.bot = Bot(base_path=base_path)
 
     def login(self):
         self.bot.login(username=self.user,password=self.password)
@@ -42,7 +43,7 @@ def main():
     """ Entry Point Program """
     args = parse_args()
     
-    instagram = Instagram(args.user,args.password)
+    instagram = Instagram(args.user,args.password,args.base_path)
     instagram.login()
 
     try:

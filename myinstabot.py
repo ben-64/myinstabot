@@ -6,6 +6,7 @@ import os
 import argparse
 import logging
 import glob
+import traceback
 
 DESCRIPTION_FILE="desc.txt"
 PHOTO_EXTENSIONS=["jpg"]
@@ -31,13 +32,82 @@ class Instagram(object):
     def login(self):
         self.bot.login(username=self.user,password=self.password)
 
-    def upload_photos(self,photos,caption=""):
+    def convert_username(self,uname):
+        try:
+            return self.bot.convert_to_user_id(uname)
+        except:
+            print(f"Error: Unable to find userid of {uname}\n")
+            sys.exit(0)
+
+    def upload_photos(self,photos,caption="",user_tags=None):
+        # Create user_tags
+        if user_tags:
+            user_tags = list(map(lambda x: {"user_id":self.convert_username(x),"x":0.5,"y":0.5},user_tags))
         if len(photos) == 1:
-            res = self.bot.upload_photo(photos[0],caption,options={"rename":False})
+            res = self.bot.upload_photo(photos[0],caption,user_tags=user_tags,options={"rename":False})
         else:
-            res = self.bot.upload_album(photos,caption,options={"rename":False})
+            res = self.bot.upload_album(photos,caption,user_tags=user_tags,options={"rename":False})
         return res
 
+
+def parse_file(path):
+    if not os.path.exists(path):
+        print(f"ERROR: {path} does not exist\n")
+        sys.exit(0)
+    content = open(path,"r").read()
+    res = []
+    for line in content.splitlines():
+        line = line.rstrip().lstrip()
+        if not line: continue
+        x = parse_line(line)
+        if x: res.extend(x)
+    return res
+
+
+def parse_line(line):
+    """ line = 'ouin file:toto.txt ouin2' """
+    TEMPLATE_FILE= "file:"
+    res = []
+    for elem in line.split(" "):
+        if elem.startswith(TEMPLATE_FILE):
+            res.extend(parse_file(elem[len(TEMPLATE_FILE):]))
+        else:
+            res.append(elem)
+    return res
+
+
+def build_metadata(path):
+    """ Return tuple: desription, list of users """
+    TEMPLATE_USER = "!user:"
+    TEMPLATE_HASHTAG = "!hashtag:"
+
+    if not os.path.exists(path):
+        return "",None
+
+    desc = []
+    hashtags = []
+    users = []
+    content = open(path,"r").read()
+
+    for line in content.splitlines():
+        line = line.rstrip().lstrip()
+        if line.startswith(TEMPLATE_USER):
+            u = parse_line(line[len(TEMPLATE_USER):].rstrip().lstrip())
+            if u: users.extend(u)
+        elif line.startswith(TEMPLATE_HASHTAG):
+            h = parse_line(line[len(TEMPLATE_HASHTAG):].rstrip().lstrip())
+            if h: hashtags.extend(h)
+        else:
+            desc.append(line)
+    
+    # Remove duplicates
+    hashtags = list(dict.fromkeys(hashtags))
+    users = list(dict.fromkeys(users))
+
+    if hashtags: desc.append(" ".join(hashtags))
+
+    return "\n".join(desc),users
+            
 
 def main():
     """ Entry Point Program """
@@ -52,21 +122,18 @@ def main():
             if not os.path.isdir(path) or folder.startswith(IGNORE_PREFIX):
                 continue
             pics = []
-            desc_path = "%s/%s" % (path,DESCRIPTION_FILE)
-            desc = ""
-            if os.path.exists(desc_path):
-                desc = open(desc_path,"r").read()
+            desc,users = build_metadata("%s/%s" % (path,DESCRIPTION_FILE))
             for ext in PHOTO_EXTENSIONS:
-                pics += [os.path.abspath(x) for x in glob.glob(path+"/*.{}".format(ext))]
+                pics += [os.path.abspath(x) for x in sorted(glob.glob(path+"/*.{}".format(ext)))]
 
-            if instagram.upload_photos(pics,desc):
+            if instagram.upload_photos(pics,desc,user_tags=users):
                 logging.info("Photo %r uploaded" % (pics,))
                 os.rename(path,os.path.join(args.folder,"%s%s" % (IGNORE_PREFIX,folder)))
                 return 0
             else:
                 logging.error("Unable to upload photo %r" % (pics,))
     except:
-        print("ERROR")
+        print(f"ERROR: {traceback.format_exc()}")
         return 1
 
     return 0
